@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FairSplit | Settle Up</title>
+    <link rel="stylesheet" href="css/styles.css">
+<script>if(localStorage.getItem('theme')==='dark') document.documentElement.setAttribute('data-theme', 'dark');</script>
+</head>
+<body>
+    <!-- Sidebar injected via JS -->
+
+    <div class="main-content">
+        <div class="header">
+            <h2>Settle Up</h2>
+        </div>
+
+        <div class="card" style="max-width: 500px;">
+            <p class="text-muted mb-3">Record a payment to settle debts.</p>
+            <form id="settleForm">
+                <div class="form-group">
+                    <label>Who paid?</label>
+                    <select id="paidBy" required></select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Who received the money?</label>
+                    <select id="paidTo" required></select>
+                </div>
+
+                <div class="form-group">
+                    <label>Amount (₹)</label>
+                    <input type="number" id="amount" step="0.01" min="0.01" placeholder="0.00" required>
+                </div>
+
+                <div id="errorMsg" class="error-msg"></div>
+                
+                <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+                    <button type="button" class="btn btn-outline" onclick="window.history.back()">Cancel</button>
+                    <button type="submit" class="btn" style="background: var(--success);">Record Payment</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        checkAuth();
+        renderSidebar('groups');
+
+        const params = new URLSearchParams(window.location.search);
+        const groupId = params.get('groupId');
+        const currentUser = JSON.parse(localStorage.getItem('user'));
+
+        if (!groupId) navigateTo('groups.html');
+
+        async function loadGroupMembers() {
+            try {
+                const group = await apiFetch(`/groups/${groupId}`);
+                const paidBySelect = document.getElementById('paidBy');
+                const paidToSelect = document.getElementById('paidTo');
+                
+                group.members.forEach(m => {
+                    const isMe = m.id === currentUser.id;
+                    const option = `<option value="${m.id}">${m.name} ${isMe ? '(You)' : ''}</option>`;
+                    paidBySelect.innerHTML += option;
+                    paidToSelect.innerHTML += option;
+                });
+                
+                // Set default paidBy to current user
+                paidBySelect.value = currentUser.id;
+            } catch (err) {
+                alert('Failed to load group members');
+                navigateTo('groups.html');
+            }
+        }
+
+        document.getElementById('settleForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const err = document.getElementById('errorMsg');
+            const btn = e.target.querySelector('button[type="submit"]');
+            
+            const paidBy = document.getElementById('paidBy').value;
+            const paidTo = document.getElementById('paidTo').value;
+
+            if (paidBy === paidTo) {
+                err.textContent = 'Cannot settle with yourself';
+                err.style.display = 'block';
+                return;
+            }
+
+            try {
+                err.style.display = 'none';
+                btn.textContent = 'Processing...';
+                
+                await apiFetch('/expenses/settle', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        groupId: groupId,
+                        paidBy: { id: paidBy },
+                        paidTo: { id: paidTo },
+                        amount: parseFloat(document.getElementById('amount').value)
+                    })
+                });
+
+                navigateTo(`group.html?id=${groupId}`);
+            } catch (error) {
+                err.textContent = error.message;
+                err.style.display = 'block';
+                btn.textContent = 'Record Payment';
+            }
+        });
+
+        loadGroupMembers();
+    </script>
+</body>
+</html>
+
